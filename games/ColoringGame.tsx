@@ -29,9 +29,12 @@ export function ColoringGame() {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const [donePreview, setDonePreview] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const game = state?.game?.kind === "coloring" ? state.game : null;
   const color = COLORING_PALETTE.find((swatch) => swatch.id === colorId)?.hex ?? COLORING_PALETTE[0].hex;
+  const saveName = `duolio-${game?.imageId ?? "frogs"}.png`;
 
   function redraw(fills: RegionFill[]) {
     const canvas = canvasRef.current;
@@ -41,6 +44,32 @@ export function ColoringGame() {
     page.image.data.set(page.original);
     for (const fill of fills) paintFill(page, fill);
     context.putImageData(page.image, 0, 0);
+  }
+
+  function openDoneModal() {
+    const canvas = canvasRef.current;
+    if (!canvas || !ready) return;
+    redraw(fillsRef.current);
+    setConfirmEmpty(false);
+    setDonePreview(canvas.toDataURL("image/png"));
+  }
+
+  function closeDoneModal() {
+    setDonePreview(null);
+  }
+
+  function onFinish() {
+    if (!ready) return;
+    if (fillsRef.current.length === 0) {
+      setConfirmEmpty(true);
+      return;
+    }
+    openDoneModal();
+  }
+
+  function savePng() {
+    if (!donePreview) return;
+    downloadPng(donePreview, saveName);
   }
 
   useEffect(() => {
@@ -119,13 +148,16 @@ export function ColoringGame() {
   }, [game?.kind]);
 
   useEffect(() => {
-    if (!confirmClear) return;
+    if (!confirmClear && !confirmEmpty && !donePreview) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setConfirmClear(false);
+      if (event.key !== "Escape") return;
+      setConfirmClear(false);
+      setConfirmEmpty(false);
+      setDonePreview(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [confirmClear]);
+  }, [confirmClear, confirmEmpty, donePreview]);
 
   function paintAt(clientX: number, clientY: number) {
     if (state?.phase !== "playing" || !ready) return;
@@ -241,7 +273,7 @@ export function ColoringGame() {
         </button>
         <button
           type="button"
-          onClick={() => void sendAction({ type: "color:finish" }, true)}
+          onClick={onFinish}
           className="h-11 rounded-2xl bg-accent px-4 text-sm font-semibold text-accent-ink"
         >
           {t.finish}
@@ -285,6 +317,67 @@ export function ColoringGame() {
           </div>
         </div>
       ) : null}
+
+      {confirmEmpty ? (
+        <div
+          className="fixed inset-0 z-40 grid place-items-end bg-ink/35 p-4 sm:place-items-center"
+          role="presentation"
+          onClick={() => setConfirmEmpty(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="empty-coloring-title"
+            className="animate-rise w-full max-w-sm rounded-[28px] bg-card p-6 text-center shadow-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="empty-coloring-title" className="text-2xl font-bold">
+              {t.emptyColorAsk}
+            </h2>
+            <p className="mt-2 text-sm font-medium text-muted">{t.emptyColorHint}</p>
+            <div className="mt-6 space-y-2">
+              <Button className="w-full" onClick={openDoneModal}>
+                {t.saveAnyway}
+              </Button>
+              <Button variant="secondary" className="w-full" onClick={() => setConfirmEmpty(false)}>
+                {t.cancel}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {donePreview ? (
+        <div
+          className="fixed inset-0 z-40 grid place-items-end bg-ink/35 p-4 sm:place-items-center"
+          role="presentation"
+          onClick={closeDoneModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="done-coloring-title"
+            className="animate-rise w-full max-w-sm rounded-[28px] bg-card p-6 text-center shadow-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="done-coloring-title" className="text-2xl font-bold">
+              {t.coloringDoneTitle}
+            </h2>
+            <div className="mt-4 overflow-hidden rounded-2xl border border-line bg-[#fffef8]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={donePreview} alt="" className="mx-auto max-h-56 w-full object-contain" />
+            </div>
+            <div className="mt-6 space-y-2">
+              <Button className="w-full" onClick={savePng}>
+                {t.saveImage}
+              </Button>
+              <Button variant="secondary" className="w-full" onClick={closeDoneModal}>
+                {t.colorAgain}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -300,4 +393,27 @@ function paintFill(page: PageBuffer, fill: RegionFill) {
     pixelFromUnit(fill.y, page.height),
     hexToRgb(fill.color),
   );
+}
+
+function downloadPng(dataUrl: string, filename: string) {
+  void fetch(dataUrl)
+    .then((response) => response.blob())
+    .then((blob) => {
+      const objectUrl = URL.createObjectURL(blob);
+      triggerAnchorDownload(objectUrl, filename);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2_000);
+    })
+    .catch(() => {
+      triggerAnchorDownload(dataUrl, filename);
+    });
+}
+
+function triggerAnchorDownload(href: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }

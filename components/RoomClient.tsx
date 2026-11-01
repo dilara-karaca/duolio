@@ -8,6 +8,7 @@ import { WaitingRoom } from "@/components/WaitingRoom";
 import { Button, ErrorNote, HeaderTools, Screen, ScreenFallback, TextField, Wordmark } from "@/components/ui";
 import { translateMessage, useLocale } from "@/lib/i18n";
 import { sessionCode, sessionNickname, subscribeSession } from "@/lib/session";
+import { SINGLE_PLAYER_TEST_MODE } from "@/lib/single-player-test";
 import { useRoom } from "@/lib/socket-context";
 import type { Ack } from "@/types";
 
@@ -37,17 +38,42 @@ export function RoomClient() {
   }, [code, connected, reconnect, returning]);
 
   if (state?.code === code) {
+    // TEMP: Single-player test mode. Re-enable room system before production.
+    if (SINGLE_PLAYER_TEST_MODE) {
+      if (state.phase === "lobby" || state.phase === "waiting") return <Lobby />;
+      return <GameShell />;
+    }
     if (state.phase === "waiting" || state.players.length < 2) return <WaitingRoom />;
     if (state.phase === "lobby") return <Lobby />;
     return <GameShell />;
   }
   if (!hydrated) return <ScreenFallback label={t.connecting} />;
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (SINGLE_PLAYER_TEST_MODE && !returning) {
+    return <SoloRedirectHome />;
+  }
   if (!returning) return <JoinPanel code={code} message={null} />;
   if (!connected || !attempt || attempt.code !== code) return <ScreenFallback label={t.connecting} />;
   const ack = attempt.ack;
-  if (!ack.ok && ack.reason === "not-found") return <MissingRoom />;
+  if (!ack.ok && ack.reason === "not-found") {
+    // TEMP: Single-player test mode. Re-enable room system before production.
+    if (SINGLE_PLAYER_TEST_MODE) return <SoloRedirectHome />;
+    return <MissingRoom />;
+  }
   if (ack.ok) return <ScreenFallback label={t.connecting} />;
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (SINGLE_PLAYER_TEST_MODE) return <SoloRedirectHome />;
   return <JoinPanel code={code} message={translateMessage(ack.message, t)} />;
+}
+
+/** TEMP: stale room codes fall back to home bootstrap instead of join UI. */
+function SoloRedirectHome() {
+  const router = useRouter();
+  const { t } = useLocale();
+  useEffect(() => {
+    router.replace("/");
+  }, [router]);
+  return <ScreenFallback label={t.connecting} />;
 }
 
 function JoinPanel({ code, message }: { code: string; message: string | null }) {

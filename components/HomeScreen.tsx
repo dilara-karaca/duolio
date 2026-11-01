@@ -1,13 +1,73 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorNote, HeaderTools, Screen, TextField, Wordmark } from "@/components/ui";
+import { Button, ErrorNote, HeaderTools, Screen, ScreenFallback, TextField, Wordmark } from "@/components/ui";
 import { translateMessage, useLocale } from "@/lib/i18n";
 import { sessionCode, sessionNickname, subscribeSession } from "@/lib/session";
+import { SINGLE_PLAYER_TEST_MODE, SOLO_TEST_NICKNAME } from "@/lib/single-player-test";
 import { useRoom } from "@/lib/socket-context";
 
 export function HomeScreen() {
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (SINGLE_PLAYER_TEST_MODE) {
+    return <SoloTestEntry />;
+  }
+  return <RoomHomeScreen />;
+}
+
+/** TEMP: boots straight into a solo lobby with a mock opponent. */
+function SoloTestEntry() {
+  const router = useRouter();
+  const { t } = useLocale();
+  const { createRoom, connected, state } = useRoom();
+  const storedName = useSyncExternalStore(subscribeSession, sessionNickname, () => "");
+  const activeCode = useSyncExternalStore(subscribeSession, sessionCode, () => "");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state?.code) {
+      router.replace(`/room/${state.code}`);
+      return;
+    }
+    if (!connected) return;
+    if (activeCode) {
+      router.replace(`/room/${activeCode}`);
+      return;
+    }
+
+    let cancel = false;
+    const nickname = storedName.trim() || SOLO_TEST_NICKNAME;
+    void createRoom(nickname).then((ack) => {
+      if (cancel) return;
+      if (!ack.ok) {
+        setError(translateMessage(ack.message, t));
+        return;
+      }
+      if (ack.code) router.replace(`/room/${ack.code}`);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [activeCode, connected, createRoom, router, state?.code, storedName, t]);
+
+  if (error) {
+    return (
+      <Screen>
+        <header className="flex items-center justify-between">
+          <Wordmark />
+          <HeaderTools />
+        </header>
+        <main className="flex flex-1 flex-col justify-center">
+          <ErrorNote message={error} />
+        </main>
+      </Screen>
+    );
+  }
+  return <ScreenFallback label={t.connecting} />;
+}
+
+function RoomHomeScreen() {
   const router = useRouter();
   const { t } = useLocale();
   const { createRoom, joinRoom } = useRoom();

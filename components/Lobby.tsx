@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GAMES } from "@/games/logic/catalog";
 import { Button, CopyButton, ErrorNote, HeaderTools, Scoreboard, Screen, Wordmark, cx } from "@/components/ui";
 import { translateMessage, useLocale } from "@/lib/i18n";
+import { SINGLE_PLAYER_TEST_MODE } from "@/lib/single-player-test";
 import { useRoom } from "@/lib/socket-context";
 
 export function Lobby() {
@@ -15,7 +16,10 @@ export function Lobby() {
   const [pending, setPending] = useState(false);
   if (!state) return null;
   const selected = state.selectedGame ? t.games[state.selectedGame] : null;
-  const disconnected = state.players.find((player) => !player.connected);
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  const disconnected = SINGLE_PLAYER_TEST_MODE
+    ? undefined
+    : state.players.find((player) => !player.connected);
 
   return (
     <Screen wide>
@@ -25,13 +29,18 @@ export function Lobby() {
       </header>
       <div className="mt-6 rounded-[28px] border border-line bg-card px-4 py-5 text-center shadow-card">
         <Scoreboard state={state} large />
-        <p className="mt-3 text-sm font-semibold tracking-[0.18em] text-muted">{state.code}</p>
-        <div className="mx-auto mt-3 flex max-w-sm">
-          <CopyButton
-            label={t.copyInvite}
-            text={() => `${window.location.origin}/room/${state.code}`}
-          />
-        </div>
+        {/* TEMP: Single-player test mode. Re-enable room system before production. */}
+        {!SINGLE_PLAYER_TEST_MODE ? (
+          <>
+            <p className="mt-3 text-sm font-semibold tracking-[0.18em] text-muted">{state.code}</p>
+            <div className="mx-auto mt-3 flex max-w-sm">
+              <CopyButton
+                label={t.copyInvite}
+                text={() => `${window.location.origin}/room/${state.code}`}
+              />
+            </div>
+          </>
+        ) : null}
       </div>
       {disconnected ? (
         <p className="mt-4 rounded-2xl bg-card px-4 py-3 text-sm font-medium text-muted">
@@ -77,15 +86,18 @@ export function Lobby() {
         </Button>
         <ErrorNote message={error} />
       </div>
-      <button
-        type="button"
-        className="mt-4 text-sm font-semibold text-muted"
-        onClick={() => {
-          void leaveRoom().then(() => router.push("/"));
-        }}
-      >
-        {t.leaveRoom}
-      </button>
+      {/* TEMP: Single-player test mode. Re-enable room system before production. */}
+      {!SINGLE_PLAYER_TEST_MODE ? (
+        <button
+          type="button"
+          className="mt-4 text-sm font-semibold text-muted"
+          onClick={() => {
+            void leaveRoom().then(() => router.push("/"));
+          }}
+        >
+          {t.leaveRoom}
+        </button>
+      ) : null}
     </Screen>
   );
 }

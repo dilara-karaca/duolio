@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Button, HeaderTools, Scoreboard, cx } from "@/components/ui";
 import { translateResultTitle, useLocale } from "@/lib/i18n";
+import { SINGLE_PLAYER_TEST_MODE } from "@/lib/single-player-test";
 import { useRoom } from "@/lib/socket-context";
 import { GameStage } from "@/games/GameStage";
 
@@ -11,7 +12,10 @@ export function GameShell() {
   const { state, backToLobby } = useRoom();
   if (!state) return null;
   const meta = state.selectedGame ? t.games[state.selectedGame] : null;
-  const disconnected = state.players.find((player) => !player.connected);
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  const disconnected = SINGLE_PLAYER_TEST_MODE
+    ? undefined
+    : state.players.find((player) => !player.connected);
 
   return (
     <div className="relative min-h-dvh">

@@ -8,6 +8,7 @@ import type {
   ServerGame,
   Slot,
 } from "../types";
+import { BOMB_COUNT } from "../games/logic/bomb";
 import { gameById } from "../games/logic/catalog";
 import {
   applyGameAction,
@@ -16,10 +17,20 @@ import {
   createGame,
 } from "../games/logic/engine";
 import { cleanCode, cleanNickname, cleanPlayerId } from "../games/logic/util";
+import {
+  advanceSoloGame,
+  createSoloBot,
+  isSoloBot,
+  isSoloTestMode,
+  soloMarkNumberAsBot,
+  soloNeedsDelayedNumberMark,
+} from "./solo-bot";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DISCONNECT_GRACE_MS = 45_000;
 const FOUND_PAUSE_MS = 800;
+// TEMP: Single-player test mode. Re-enable room system before production.
+const SOLO_NUMBER_MARK_MS = 2_500;
 
 interface Player {
   id: string;
@@ -41,6 +52,8 @@ interface Room {
   game: ServerGame | null;
   result: ClientState["result"];
   timer?: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>;
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  soloMarkTimer?: ReturnType<typeof setTimeout>;
 }
 
 const rooms = new Map<string, Room>();
@@ -224,6 +237,25 @@ export function attachRooms(io: Server) {
         });
         return;
       }
+      // TEMP: Single-player test mode. Re-enable room system before production.
+      if (isSoloTestMode() && room.game) {
+        room.game = advanceSoloGame(room.game);
+        const botWin = soloBombWinner(room.game);
+        if (botWin !== null) {
+          const winner = room.players.find((item) => item.slot === botWin);
+          finish(io, room, {
+            winnerSlot: botWin,
+            title: `${winner?.nickname ?? "Player"} Wins!`,
+            scored: true,
+          });
+          return;
+        }
+        if (event.type !== "intermission" && soloNeedsDelayedNumberMark(room.game)) {
+          broadcast(io, room);
+          scheduleSoloNumberMark(io, room);
+          return;
+        }
+      }
       if (event.type === "intermission") {
         broadcast(io, room);
         clearRoomTimer(room);
@@ -231,6 +263,15 @@ export function attachRooms(io: Server) {
           const live = rooms.get(room.code);
           if (!live || live.phase !== "playing" || !live.game) return;
           live.game = continueIntermission(live.game);
+          // TEMP: Single-player test mode. Re-enable room system before production.
+          if (isSoloTestMode() && live.game) {
+            live.game = advanceSoloGame(live.game);
+            if (soloNeedsDelayedNumberMark(live.game)) {
+              broadcast(io, live);
+              scheduleSoloNumberMark(io, live);
+              return;
+            }
+          }
           broadcast(io, live);
         }, FOUND_PAUSE_MS);
         return;
@@ -309,6 +350,11 @@ function createRoom(nickname: string, playerId: string, socket: Socket) {
   };
   rooms.set(code, room);
   attachPlayer(socket, room, player);
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (isSoloTestMode()) {
+    room.players.push(createSoloBot(1));
+    room.phase = "lobby";
+  }
   return room;
 }
 
@@ -338,6 +384,10 @@ function currentPlayer(socket: Socket, room: Room | undefined) {
 }
 
 function canPlay(room: Room) {
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (isSoloTestMode()) {
+    return room.players.some((player) => player.connected && !isSoloBot(player.id));
+  }
   return room.players.filter((player) => player.connected).length >= 2;
 }
 
@@ -345,10 +395,17 @@ function beginGame(io: Server, room: Room) {
   if (!room.selectedGame) return;
   clearRoomTimer(room);
   room.game = createGame(room.selectedGame);
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (isSoloTestMode() && room.game) {
+    room.game = advanceSoloGame(room.game);
+  }
   room.result = null;
   room.countdown = null;
   room.phase = "playing";
   broadcast(io, room);
+  if (room.game && soloNeedsDelayedNumberMark(room.game)) {
+    scheduleSoloNumberMark(io, room);
+  }
 }
 
 function startCountdown(io: Server, room: Room, onDone: () => void) {
@@ -390,6 +447,11 @@ function returnToLobby(room: Room) {
   room.result = null;
   room.countdown = null;
   room.selectedGame = null;
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (isSoloTestMode()) {
+    room.phase = "lobby";
+    return;
+  }
   room.phase = room.players.filter((player) => player.connected).length >= 2 ? "lobby" : "waiting";
 }
 
@@ -407,7 +469,9 @@ function removePlayer(io: Server, room: Room, playerId: string) {
   if (leaving.disconnectTimer) clearTimeout(leaving.disconnectTimer);
   room.players = room.players.filter((player) => player.id !== playerId);
   clearRoomTimer(room);
-  if (room.players.length === 0) {
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  const humansLeft = room.players.filter((player) => !isSoloBot(player.id));
+  if (room.players.length === 0 || (isSoloTestMode() && humansLeft.length === 0)) {
     rooms.delete(room.code);
     return;
   }
@@ -426,9 +490,49 @@ function removePlayer(io: Server, room: Room, playerId: string) {
 
 function broadcast(io: Server, room: Room) {
   for (const player of room.players) {
-    if (!player.connected) continue;
+    // TEMP: Single-player test mode — skip mock bot (empty socketId).
+    if (!player.connected || !player.socketId) continue;
     io.to(player.socketId).emit("state", view(room, player.id));
   }
+}
+
+// TEMP: Single-player test mode. Re-enable room system before production.
+function soloBombWinner(game: ServerGame): Slot | null {
+  if (game.kind !== "bomb" || game.phase !== "playing") return null;
+  if (game.found[0] >= BOMB_COUNT) return 1;
+  if (game.found[1] >= BOMB_COUNT) return 0;
+  return null;
+}
+
+// TEMP: Single-player test mode. Re-enable room system before production.
+function scheduleSoloNumberMark(io: Server, room: Room) {
+  if (!room.game || !soloNeedsDelayedNumberMark(room.game)) return;
+  if (room.soloMarkTimer) return;
+  const code = room.code;
+  room.soloMarkTimer = setTimeout(() => {
+    const live = rooms.get(code);
+    if (!live) return;
+    live.soloMarkTimer = undefined;
+    if (live.phase !== "playing" || !live.game || !soloNeedsDelayedNumberMark(live.game)) return;
+    if (live.game.kind !== "number-race") return;
+    live.game = soloMarkNumberAsBot(live.game);
+    broadcast(io, live);
+    clearRoomTimer(live);
+    live.timer = setTimeout(() => {
+      const again = rooms.get(code);
+      if (!again || again.phase !== "playing" || !again.game) return;
+      again.game = continueIntermission(again.game);
+      if (isSoloTestMode() && again.game) {
+        again.game = advanceSoloGame(again.game);
+        if (soloNeedsDelayedNumberMark(again.game)) {
+          broadcast(io, again);
+          scheduleSoloNumberMark(io, again);
+          return;
+        }
+      }
+      broadcast(io, again);
+    }, FOUND_PAUSE_MS);
+  }, SOLO_NUMBER_MARK_MS);
 }
 
 function view(room: Room, playerId: string): ClientState {
@@ -452,10 +556,16 @@ function view(room: Room, playerId: string): ClientState {
 }
 
 function clearRoomTimer(room: Room) {
-  if (!room.timer) return;
-  clearTimeout(room.timer);
-  clearInterval(room.timer);
-  room.timer = undefined;
+  if (room.timer) {
+    clearTimeout(room.timer);
+    clearInterval(room.timer);
+    room.timer = undefined;
+  }
+  // TEMP: Single-player test mode. Re-enable room system before production.
+  if (room.soloMarkTimer) {
+    clearTimeout(room.soloMarkTimer);
+    room.soloMarkTimer = undefined;
+  }
 }
 
 function makeCode() {

@@ -126,6 +126,12 @@ const tr = {
   clearHint: "Sayfa baştaki siyah-beyaz haline döner.",
   cancel: "Vazgeç",
   finish: "Bitir",
+  coloringDoneTitle: "Boyaman tamamlandı! 🎨",
+  saveImage: "Görseli Kaydet",
+  colorAgain: "Tekrar Boya",
+  emptyColorAsk: "Henüz boyama yapmadın. Yine de kaydetmek istiyor musun?",
+  emptyColorHint: "Sayfa şu anki haliyle kaydedilir.",
+  saveAnyway: "Yine de kaydet",
   palette: "Renkler",
   coloringCanvas: "Boyama sayfası",
   coloringLoadError: "Boyama sayfası yüklenemedi.",
@@ -255,6 +261,12 @@ const en = {
   clearHint: "The page returns to the original black-and-white drawing.",
   cancel: "Cancel",
   finish: "Finish",
+  coloringDoneTitle: "Your coloring is done! 🎨",
+  saveImage: "Save Image",
+  colorAgain: "Color Again",
+  emptyColorAsk: "You haven't colored anything yet. Save anyway?",
+  emptyColorHint: "The page will be saved as it looks now.",
+  saveAnyway: "Save anyway",
   palette: "Colors",
   coloringCanvas: "Coloring page",
   coloringLoadError: "The coloring page could not be loaded.",
@@ -384,6 +396,12 @@ export type Messages = {
   clearHint: string;
   cancel: string;
   finish: string;
+  coloringDoneTitle: string;
+  saveImage: string;
+  colorAgain: string;
+  emptyColorAsk: string;
+  emptyColorHint: string;
+  saveAnyway: string;
   palette: string;
   coloringCanvas: string;
   coloringLoadError: string;
