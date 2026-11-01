@@ -10,7 +10,9 @@ const BLUE: Rgb = { r: 61, g: 185, b: 255 };
 
 test("paper tolerance keeps near-white pixels and rejects dark lines", () => {
   assert.equal(isPaperPixel(255, 255, 255), true);
-  assert.equal(isPaperPixel(200, 200, 200), true);
+  assert.equal(isPaperPixel(230, 230, 230), true);
+  assert.equal(isPaperPixel(200, 200, 200), false);
+  assert.equal(isPaperPixel(200, 200, 200, 80), true);
   assert.equal(isPaperPixel(40, 40, 40), false);
   assert.equal(isPaperPixel(0, 0, 0), false);
 });
@@ -25,14 +27,16 @@ test("flood fill stays inside a closed region and skips the line", () => {
   // Light anti-aliased edge just inside the top region.
   setPixel(original, width, 3, 1, 210, 210, 210);
   const pixels = new Uint8ClampedArray(original);
-  const mask = buildLineMask(original, width, height, 80, 0);
+  const mask = buildLineMask(original, width, height, 80, 0, 0);
   const changed = floodFill(pixels, original, mask, width, height, 3, 1, RED, 80);
 
   assert.equal(changed, width * 2);
   assert.deepEqual(read(pixels, width, 3, 1), [226, 75, 87, 255]);
   assert.deepEqual(read(pixels, width, 0, 2), [0, 0, 0, 255]);
   assert.deepEqual(read(pixels, width, 3, 4), [255, 255, 255, 255]);
-  assert.equal(floodFill(pixels, original, mask, width, height, 1, 2, BLUE, 80), 0);
+  // Tapping ink may nudge into the nearest pocket, but the ink pixel itself stays.
+  floodFill(pixels, original, mask, width, height, 1, 2, BLUE, 80);
+  assert.deepEqual(read(pixels, width, 1, 2), [0, 0, 0, 255]);
 });
 
 test("a second fill recolors the same region without crossing the line", () => {
@@ -41,7 +45,7 @@ test("a second fill recolors the same region without crossing the line", () => {
   const original = blank(width, height, 250);
   for (let y = 0; y < height; y += 1) setPixel(original, width, 3, y, 10, 10, 10);
   const pixels = new Uint8ClampedArray(original);
-  const mask = buildLineMask(original, width, height, 80, 0);
+  const mask = buildLineMask(original, width, height, 80, 0, 0);
   floodFill(pixels, original, mask, width, height, 1, 2, RED, 80);
   const changed = floodFill(pixels, original, mask, width, height, 1, 2, GREEN, 80);
   assert.ok(changed > 0);
@@ -58,12 +62,12 @@ test("line dilation closes a one pixel gap", () => {
     if (y === 2) continue;
     setPixel(original, width, 3, y, 0, 0, 0);
   }
-  const openMask = buildLineMask(original, width, height, 80, 0);
+  const openMask = buildLineMask(original, width, height, 80, 0, 0);
   const openPixels = new Uint8ClampedArray(original);
   floodFill(openPixels, original, openMask, width, height, 1, 2, RED, 80);
   assert.deepEqual(read(openPixels, width, 5, 2).slice(0, 3), [226, 75, 87]);
 
-  const closedMask = buildLineMask(original, width, height, 80, 1);
+  const closedMask = buildLineMask(original, width, height, 80, 1, 0);
   const closedPixels = new Uint8ClampedArray(original);
   floodFill(closedPixels, original, closedMask, width, height, 1, 2, BLUE, 80);
   assert.deepEqual(read(closedPixels, width, 5, 2).slice(0, 3), [255, 255, 255]);
@@ -76,7 +80,8 @@ test("frogs page fills each closed region and leaves the ink", () => {
   const painted = new Uint8ClampedArray(original);
 
   const line = findInk(original, mask, width);
-  assert.equal(floodFill(painted, original, mask, width, height, line.x, line.y, RED), 0);
+  floodFill(painted, original, mask, width, height, line.x, line.y, RED);
+  // Ink taps may nudge into a nearby pocket, but the ink pixel itself is never painted.
   assert.ok(read(painted, width, line.x, line.y)[0] < 80);
 
   const left = fillAt(painted, original, mask, width, height, 450, 520, RED);

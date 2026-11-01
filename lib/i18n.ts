@@ -1,6 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import type { ColoringImageId, PuzzleImageId } from "@/games/logic/catalog";
+import type { PaletteId } from "@/games/logic/palette";
 import type { GameId } from "@/types";
 
 export type Locale = "tr" | "en";
@@ -133,6 +135,11 @@ const tr = {
   emptyColorHint: "Sayfa şu anki haliyle kaydedilir.",
   saveAnyway: "Yine de kaydet",
   palette: "Renkler",
+  moreColors: "Daha fazla renk",
+  classicColors: "Klasik renkler",
+  pickColoringPage: "Bir resim seç",
+  pickColoringHint: "Birlikte boyamak için bir sayfa seçin.",
+  changeColoringPage: "Resmi değiştir",
   coloringCanvas: "Boyama sayfası",
   coloringLoadError: "Boyama sayfası yüklenemedi.",
   colors: {
@@ -142,32 +149,60 @@ const tr = {
     white: "Beyaz",
     red: "Kırmızı",
     burgundy: "Bordo",
+    crimson: "Kızıl",
+    coral: "Mercan",
     orange: "Turuncu",
     lightOrange: "Açık turuncu",
+    peach: "Şeftali",
     yellow: "Sarı",
     gold: "Altın sarısı",
+    mustard: "Hardal",
     lightGreen: "Açık yeşil",
+    lime: "Limon yeşili",
     green: "Yeşil",
     darkGreen: "Koyu yeşil",
-    lightBlue: "Açık mavi",
-    blue: "Mavi",
-    darkBlue: "Koyu mavi",
-    lightPurple: "Açık mor",
-    purple: "Mor",
-    darkPurple: "Koyu mor",
-    pink: "Pembe",
-    lightPink: "Açık pembe",
-    brown: "Kahverengi",
-    lightBrown: "Açık kahverengi",
-    beige: "Bej",
-    skin: "Ten rengi",
+    olive: "Zeytin yeşili",
+    mint: "Nane",
     lightTeal: "Açık turkuaz",
     teal: "Turkuaz",
+    seafoam: "Deniz köpüğü",
+    cyan: "Camgöbeği",
+    lightBlue: "Açık mavi",
+    sky: "Gök mavisi",
+    blue: "Mavi",
+    darkBlue: "Koyu mavi",
     navy: "Lacivert",
+    indigo: "Çivit",
+    lightPurple: "Açık mor",
+    lavender: "Lavanta",
+    purple: "Mor",
+    darkPurple: "Koyu mor",
+    magenta: "Macenta",
+    pink: "Pembe",
+    lightPink: "Açık pembe",
+    rose: "Gül kurusu",
+    brown: "Kahverengi",
+    lightBrown: "Açık kahverengi",
+    chocolate: "Çikolata",
+    beige: "Bej",
+    sand: "Kum",
+    skin: "Ten rengi",
+    maroon: "Kestane",
+    slate: "Arduvaz",
   },
   puzzleLocked: (n: number) => `${n}/9 kilitli`,
   puzzleHint: "Parçayı yerine sürükle. Otursa kilitlenir.",
-  coloringPages: { house: "Ev", cat: "Kedi", flower: "Çiçek", boat: "Tekne" },
+  coloringPages: {
+    arcade: "Arcade",
+    astronaut: "Astronot",
+    bikeRide: "Bisiklet gezisi",
+    library: "Büyülü kütüphane",
+    picnic: "Gece pikniği",
+    tokyo: "Japon sokak",
+    cafe: "Kafe",
+    track: "Pist",
+    squirrels: "Sincaplar",
+  },
   puzzlePics: { coast: "Sahil", city: "Şehir", garden: "Bahçe" },
   games: gamesTr,
   errors: {
@@ -188,6 +223,7 @@ const tr = {
     pickColor: "Paletten bir renk seç.",
     outsidePage: "Bu nokta sayfanın dışında.",
     couldNotColor: "Bu bölge boyanamadı.",
+    badPicture: "Bu resim kullanılamıyor.",
   },
 } as const;
 
@@ -268,6 +304,11 @@ const en = {
   emptyColorHint: "The page will be saved as it looks now.",
   saveAnyway: "Save anyway",
   palette: "Colors",
+  moreColors: "More colors",
+  classicColors: "Classic colors",
+  pickColoringPage: "Pick a picture",
+  pickColoringHint: "Choose a page to color together.",
+  changeColoringPage: "Change picture",
   coloringCanvas: "Coloring page",
   coloringLoadError: "The coloring page could not be loaded.",
   colors: {
@@ -277,32 +318,60 @@ const en = {
     white: "White",
     red: "Red",
     burgundy: "Burgundy",
+    crimson: "Crimson",
+    coral: "Coral",
     orange: "Orange",
     lightOrange: "Light orange",
+    peach: "Peach",
     yellow: "Yellow",
     gold: "Gold",
+    mustard: "Mustard",
     lightGreen: "Light green",
+    lime: "Lime",
     green: "Green",
     darkGreen: "Dark green",
-    lightBlue: "Light blue",
-    blue: "Blue",
-    darkBlue: "Dark blue",
-    lightPurple: "Light purple",
-    purple: "Purple",
-    darkPurple: "Dark purple",
-    pink: "Pink",
-    lightPink: "Light pink",
-    brown: "Brown",
-    lightBrown: "Light brown",
-    beige: "Beige",
-    skin: "Skin",
+    olive: "Olive",
+    mint: "Mint",
     lightTeal: "Light teal",
     teal: "Teal",
+    seafoam: "Seafoam",
+    cyan: "Cyan",
+    lightBlue: "Light blue",
+    sky: "Sky",
+    blue: "Blue",
+    darkBlue: "Dark blue",
     navy: "Navy",
+    indigo: "Indigo",
+    lightPurple: "Light purple",
+    lavender: "Lavender",
+    purple: "Purple",
+    darkPurple: "Dark purple",
+    magenta: "Magenta",
+    pink: "Pink",
+    lightPink: "Light pink",
+    rose: "Rose",
+    brown: "Brown",
+    lightBrown: "Light brown",
+    chocolate: "Chocolate",
+    beige: "Beige",
+    sand: "Sand",
+    skin: "Skin",
+    maroon: "Maroon",
+    slate: "Slate",
   },
   puzzleLocked: (n: number) => `${n}/9 locked`,
   puzzleHint: "Drag a piece into its place. It locks when it fits.",
-  coloringPages: { house: "House", cat: "Cat", flower: "Flower", boat: "Boat" },
+  coloringPages: {
+    arcade: "Arcade",
+    astronaut: "Astronaut",
+    bikeRide: "Bike ride",
+    library: "Magic library",
+    picnic: "Night picnic",
+    tokyo: "Tokyo street",
+    cafe: "Cafe",
+    track: "Track",
+    squirrels: "Squirrels",
+  },
   puzzlePics: { coast: "Coast", city: "City", garden: "Garden" },
   games: gamesEn,
   errors: {
@@ -323,6 +392,7 @@ const en = {
     pickColor: "Pick a color from the palette.",
     outsidePage: "That spot is outside the page.",
     couldNotColor: "Could not color that region.",
+    badPicture: "That picture is not available.",
   },
 } as const;
 
@@ -403,42 +473,18 @@ export type Messages = {
   emptyColorHint: string;
   saveAnyway: string;
   palette: string;
+  moreColors: string;
+  classicColors: string;
+  pickColoringPage: string;
+  pickColoringHint: string;
+  changeColoringPage: string;
   coloringCanvas: string;
   coloringLoadError: string;
-  colors: {
-    black: string;
-    darkGray: string;
-    gray: string;
-    white: string;
-    red: string;
-    burgundy: string;
-    orange: string;
-    lightOrange: string;
-    yellow: string;
-    gold: string;
-    lightGreen: string;
-    green: string;
-    darkGreen: string;
-    lightBlue: string;
-    blue: string;
-    darkBlue: string;
-    lightPurple: string;
-    purple: string;
-    darkPurple: string;
-    pink: string;
-    lightPink: string;
-    brown: string;
-    lightBrown: string;
-    beige: string;
-    skin: string;
-    lightTeal: string;
-    teal: string;
-    navy: string;
-  };
+  colors: Record<PaletteId, string>;
   puzzleLocked: (n: number) => string;
   puzzleHint: string;
-  coloringPages: { house: string; cat: string; flower: string; boat: string };
-  puzzlePics: { coast: string; city: string; garden: string };
+  coloringPages: Record<ColoringImageId, string>;
+  puzzlePics: Record<PuzzleImageId, string>;
   games: Record<GameId, { name: string; description: string }>;
   errors: {
     nickname: string;
@@ -458,6 +504,7 @@ export type Messages = {
     pickColor: string;
     outsidePage: string;
     couldNotColor: string;
+    badPicture: string;
   };
 };
 
@@ -480,6 +527,7 @@ const errorMap: Record<string, keyof Messages["errors"]> = {
   "Pick a color from the palette.": "pickColor",
   "That spot is outside the page.": "outsidePage",
   "Could not color that region.": "couldNotColor",
+  "That picture is not available.": "badPicture",
 };
 
 export function translateMessage(message: string | null | undefined, t: Messages): string | null {

@@ -2,14 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ColorOp, RegionFill } from "@/types";
+import { COLORING_PAGES, coloringPageSrc, type ColoringImageId } from "@/games/logic/catalog";
 import { buildLineMask, floodFill, pixelFromUnit } from "@/games/logic/flood-fill";
-import { COLORING_PALETTE, hexToRgb, type PaletteId } from "@/games/logic/palette";
+import {
+  CLASSIC_PALETTE,
+  COLORING_PALETTE,
+  hexToRgb,
+  isClassicPaletteId,
+  type PaletteId,
+} from "@/games/logic/palette";
 import { Button, cx } from "@/components/ui";
 import { translateMessage, useLocale } from "@/lib/i18n";
 import { ensureSession } from "@/lib/session";
 import { useRoom } from "@/lib/socket-context";
-
-const PAGE = "/coloring/frogs.png";
 
 interface PageBuffer {
   width: number;
@@ -26,15 +31,20 @@ export function ColoringGame() {
   const pageRef = useRef<PageBuffer | null>(null);
   const fillsRef = useRef<RegionFill[]>([]);
   const [colorId, setColorId] = useState<PaletteId>("purple");
+  const [widePalette, setWidePalette] = useState(false);
+  const [pickingPage, setPickingPage] = useState(true);
+  const [hasPickedPage, setHasPickedPage] = useState(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [pageSize, setPageSize] = useState({ w: 3, h: 2 });
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [donePreview, setDonePreview] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const game = state?.game?.kind === "coloring" ? state.game : null;
   const color = COLORING_PALETTE.find((swatch) => swatch.id === colorId)?.hex ?? COLORING_PALETTE[0].hex;
-  const saveName = `duolio-${game?.imageId ?? "frogs"}.png`;
+  const visiblePalette = widePalette ? COLORING_PALETTE : CLASSIC_PALETTE;
+  const saveName = `duolio-${game?.imageId ?? "coloring"}.png`;
 
   function redraw(fills: RegionFill[]) {
     const canvas = canvasRef.current;
@@ -72,17 +82,34 @@ export function ColoringGame() {
     downloadPng(donePreview, saveName);
   }
 
+  function pickPage(imageId: ColoringImageId) {
+    setPickingPage(false);
+    setHasPickedPage(true);
+    setMessage(null);
+    if (game?.imageId === imageId) return;
+    void sendAction({ type: "color:image", imageId }, true).then((ack) => {
+      if (!ack.ok) {
+        setMessage(ack.message);
+        setPickingPage(true);
+      }
+    });
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !game) return;
+    if (!canvas || !game || pickingPage) return;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return;
     let cancelled = false;
+    setReady(false);
+    setFailed(false);
+    pageRef.current = null;
     const image = new Image();
     image.onload = () => {
       if (cancelled) return;
       canvas.width = image.naturalWidth;
       canvas.height = image.naturalHeight;
+      setPageSize({ w: image.naturalWidth, h: image.naturalHeight });
       context.drawImage(image, 0, 0);
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
       pageRef.current = {
@@ -92,27 +119,29 @@ export function ColoringGame() {
         mask: buildLineMask(imageData.data, canvas.width, canvas.height),
         image: imageData,
       };
+      fillsRef.current = game.fills.map((fill) => ({ ...fill }));
+      redraw(fillsRef.current);
       setFailed(false);
       setReady(true);
     };
     image.onerror = () => {
       if (!cancelled) setFailed(true);
     };
-    image.src = PAGE;
+    image.src = coloringPageSrc(game.imageId);
     return () => {
       cancelled = true;
     };
-    // Reload only when a coloring game is opened, not on every fill.
+    // Reload when the shared page changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.kind]);
+  }, [game?.kind, game?.imageId, pickingPage]);
 
   useEffect(() => {
-    if (!ready || !game) return;
+    if (!ready || !game || pickingPage) return;
     fillsRef.current = game.fills.map((fill) => ({ ...fill }));
     redraw(fillsRef.current);
     // revision is the server signal that the fill list was replaced
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, game?.revision]);
+  }, [ready, game?.revision, pickingPage]);
 
   useEffect(() => {
     if (!socket) return;
@@ -135,7 +164,7 @@ export function ColoringGame() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || pickingPage) return;
     const block = (event: TouchEvent) => {
       if (event.cancelable) event.preventDefault();
     };
@@ -145,7 +174,7 @@ export function ColoringGame() {
       canvas.removeEventListener("touchstart", block);
       canvas.removeEventListener("touchmove", block);
     };
-  }, [game?.kind]);
+  }, [game?.kind, pickingPage]);
 
   useEffect(() => {
     if (!confirmClear && !confirmEmpty && !donePreview) return;
@@ -160,7 +189,7 @@ export function ColoringGame() {
   }, [confirmClear, confirmEmpty, donePreview]);
 
   function paintAt(clientX: number, clientY: number) {
-    if (state?.phase !== "playing" || !ready) return;
+    if (state?.phase !== "playing" || !ready || pickingPage) return;
     const canvas = canvasRef.current;
     const page = pageRef.current;
     const context = canvas?.getContext("2d");
@@ -206,10 +235,59 @@ export function ColoringGame() {
 
   if (!game) return null;
 
+  if (pickingPage) {
+    return (
+      <div className="mx-auto w-full max-w-lg">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold">{t.pickColoringPage}</h2>
+          <p className="mt-1 text-sm font-medium text-muted">{t.pickColoringHint}</p>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {COLORING_PAGES.map((page) => {
+            const selected = hasPickedPage && game.imageId === page.id;
+            return (
+              <button
+                key={page.id}
+                type="button"
+                onClick={() => pickPage(page.id)}
+                className={cx(
+                  "overflow-hidden rounded-[24px] border-2 bg-card text-left shadow-card transition active:scale-[0.98]",
+                  selected ? "border-accent" : "border-line",
+                )}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={coloringPageSrc(page.id)}
+                  alt=""
+                  className="aspect-[3/2] w-full bg-[#fffef8] object-cover"
+                />
+                <span className="block px-3 py-2 text-sm font-semibold">{t.coloringPages[page.id]}</span>
+              </button>
+            );
+          })}
+        </div>
+        {hasPickedPage ? (
+          <div className="mt-4">
+            <Button variant="secondary" className="w-full" onClick={() => setPickingPage(false)}>
+              {t.cancel}
+            </Button>
+          </div>
+        ) : null}
+        {message ? <p className="mt-3 text-center text-sm font-medium text-bad">{translateMessage(message, t)}</p> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full">
-      <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc(68dvh * 3 / 2))" }}>
-        <div className="relative aspect-[3/2] w-full overflow-hidden rounded-[28px] border border-line bg-[#fffef8] shadow-card">
+      <div
+        className="mx-auto w-full"
+        style={{ maxWidth: `min(100%, calc(68dvh * ${pageSize.w} / ${pageSize.h}))` }}
+      >
+        <div
+          className="relative w-full overflow-hidden rounded-[28px] border border-line bg-[#fffef8] shadow-card"
+          style={{ aspectRatio: `${pageSize.w} / ${pageSize.h}` }}
+        >
           <canvas
             ref={canvasRef}
             aria-label={t.coloringCanvas}
@@ -229,32 +307,61 @@ export function ColoringGame() {
         </div>
       </div>
 
-      <div role="radiogroup" aria-label={t.palette} className="mt-3 flex flex-wrap justify-center gap-2">
-        {COLORING_PALETTE.map((swatch) => {
-          const selected = swatch.id === colorId;
-          return (
-            <button
-              key={swatch.id}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              aria-label={t.colors[swatch.id]}
-              title={t.colors[swatch.id]}
-              onClick={() => setColorId(swatch.id)}
-              className={cx(
-                "rounded-full border transition",
-                selected
-                  ? "z-10 size-11 border-ink ring-2 ring-ink ring-offset-2 ring-offset-paper sm:size-12"
-                  : "size-8 border-black/15 sm:size-9",
-              )}
-              style={{ background: swatch.hex }}
-            />
-          );
-        })}
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <div role="radiogroup" aria-label={t.palette} className="flex flex-wrap justify-center gap-2">
+          {visiblePalette.map((swatch) => {
+            const selected = swatch.id === colorId;
+            return (
+              <button
+                key={swatch.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={t.colors[swatch.id]}
+                title={t.colors[swatch.id]}
+                onClick={() => setColorId(swatch.id)}
+                className={cx(
+                  "rounded-full border transition",
+                  selected
+                    ? "z-10 size-11 border-ink ring-2 ring-ink ring-offset-2 ring-offset-paper sm:size-12"
+                    : "size-8 border-black/15 sm:size-9",
+                )}
+                style={{ background: swatch.hex }}
+              />
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          aria-pressed={widePalette}
+          aria-label={widePalette ? t.classicColors : t.moreColors}
+          title={widePalette ? t.classicColors : t.moreColors}
+          onClick={() => {
+            setWidePalette((open) => {
+              if (open && !isClassicPaletteId(colorId)) setColorId("purple");
+              return !open;
+            });
+          }}
+          className={cx(
+            "grid size-11 place-items-center rounded-2xl border transition sm:size-12",
+            widePalette
+              ? "border-ink bg-accent text-accent-ink shadow-card"
+              : "border-line bg-card text-ink shadow-card",
+          )}
+        >
+          <BrushIcon />
+        </button>
       </div>
       <p className="mt-2 text-center text-sm font-semibold">{t.colors[colorId]}</p>
 
       <div className="mt-3 flex flex-wrap justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPickingPage(true)}
+          className="h-11 rounded-2xl bg-card px-4 text-sm font-semibold"
+        >
+          {t.changeColoringPage}
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -379,6 +486,27 @@ export function ColoringGame() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function BrushIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5.5 20.5c2.8 0 4.5-1.2 5.2-3.1.3-.8-.3-1.4-1.1-1.4H8.2c-.9 0-1.5-.8-1.2-1.6.6-1.7 2.3-2.9 5-2.9 3.8 0 6.5 2.2 6.5 5.4 0 3.4-3 5.6-7.5 5.6-2.6 0-4.7-.7-6.1-1.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.2 4.2l5.6 5.6M12.8 5.6l-6 6c-.7.7-1 1.7-.8 2.7l.3 1.3 1.3.3c1 .2 2-.1 2.7-.8l6-6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

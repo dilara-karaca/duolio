@@ -46,10 +46,15 @@ export const GAMES: GameMeta[] = [
 ];
 
 export const COLORING_PAGES = [
-  { id: "house", label: "House" },
-  { id: "cat", label: "Cat" },
-  { id: "flower", label: "Flower" },
-  { id: "boat", label: "Boat" },
+  { id: "arcade", file: "arcade.png" },
+  { id: "astronaut", file: "astronot.png" },
+  { id: "bikeRide", file: "bisiklet_gezisi.png" },
+  { id: "library", file: "büyülü_kütüphane.png" },
+  { id: "picnic", file: "gece_piknik.png" },
+  { id: "tokyo", file: "japon_sokak.png" },
+  { id: "cafe", file: "kafe.png" },
+  { id: "track", file: "pist.png" },
+  { id: "squirrels", file: "sincaplar.png" },
 ] as const;
 
 export const PUZZLE_PICTURES = [
@@ -71,4 +76,9 @@ export function isColoringImage(id: string): id is ColoringImageId {
 
 export function isPuzzleImage(id: string): id is PuzzleImageId {
   return PUZZLE_PICTURES.some((picture) => picture.id === id);
+}
+
+export function coloringPageSrc(id: string) {
+  const page = COLORING_PAGES.find((item) => item.id === id) ?? COLORING_PAGES[0];
+  return `/coloring/${encodeURIComponent(page.file)}`;
 }

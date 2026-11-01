@@ -136,7 +136,7 @@ test("puzzle pieces lock on the correct square and complete together", () => {
 
 test("coloring undo removes only your last fill", () => {
   let game = createGame("coloring");
-  assert.equal(game.kind === "coloring" && game.imageId, "frogs");
+  assert.equal(game.kind === "coloring" && game.imageId, "arcade");
   game = applyGameAction(game, 0, "player-a", {
     type: "color:fill",
     id: "fill-aaa-1",

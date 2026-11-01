@@ -1,10 +1,17 @@
 import type { ApplyOutcome, ColoringGame, GameAction, RegionFill } from "../../types";
+import { COLORING_PAGES, isColoringImage } from "./catalog";
 import { isPaletteHex } from "./palette";
 
 const MAX_FILLS = 400;
+const DEFAULT_IMAGE = COLORING_PAGES[0].id;
 
-export function createColoringGame(): ColoringGame {
-  return { kind: "coloring", imageId: "frogs", fills: [], revision: 1 };
+export function createColoringGame(imageId: string = DEFAULT_IMAGE): ColoringGame {
+  return {
+    kind: "coloring",
+    imageId: isColoringImage(imageId) ? imageId : DEFAULT_IMAGE,
+    fills: [],
+    revision: 1,
+  };
 }
 
 export function applyColoring(game: ColoringGame, playerId: string, action: GameAction): ApplyOutcome {
@@ -13,6 +20,16 @@ export function applyColoring(game: ColoringGame, playerId: string, action: Game
   if (action.type === "color:clear") {
     return {
       game: { ...game, fills: [], revision: game.revision + 1 },
+      event: { type: "ok" },
+    };
+  }
+  if (action.type === "color:image") {
+    if (!isColoringImage(action.imageId)) {
+      return { game, event: { type: "invalid", message: "That picture is not available." } };
+    }
+    if (action.imageId === game.imageId) return { game, event: { type: "ok" }, quiet: true };
+    return {
+      game: { ...game, imageId: action.imageId, fills: [], revision: game.revision + 1 },
       event: { type: "ok" },
     };
   }

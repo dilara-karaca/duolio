@@ -164,6 +164,7 @@ export type GameAction =
   | { type: "color:undo" }
   | { type: "color:clear" }
   | { type: "color:finish" }
+  | { type: "color:image"; imageId: string }
   | { type: "puzzle:move"; id: number; x: number; y: number }
   | { type: "puzzle:drop"; id: number; x: number; y: number }
   | { type: "puzzle:image"; imageId: string };
